@@ -1,12 +1,40 @@
 package part1_recap
 
-import akka.actor.{Actor, ActorSystem, Props}
+import akka.actor.Actor.Receive
+import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.{Actor, ActorLogging, ActorSystem, OneForOneStrategy, PoisonPill, Props, Stash, SupervisorStrategy}
+import akka.util.Timeout
 
 object AkkaRecap extends App {
 
-  class SimpleActor extends Actor {
+  class SimpleActor extends Actor with ActorLogging with Stash {
     override def receive: Receive = {
-      case message => println(s"I received: $message")
+      case "createChild" =>
+        val childActor = context.actorOf(Props[SimpleActor], "myChild")
+        childActor ! "hello"
+      case "stashThis" =>
+        stash()
+      case "change handler NOW" =>
+        unstashAll()
+        context.become(anotherHandler)
+      case "change" => context.become(anotherHandler)
+      case message =>
+        println(s"I received: $message")
+        sender() ! "change"
+    }
+
+    def anotherHandler: Receive = {
+      case message => println(s"In another receive handler: $message")
+    }
+
+    override def preStart(): Unit = {
+      super.preStart()
+      log.info("I'm starting")
+    }
+
+    override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy() {
+      case _: RuntimeException => Restart
+      case _ => Stop
     }
   }
 
@@ -22,4 +50,36 @@ object AkkaRecap extends App {
     - each message is processed/handled ATOMICALLY
     - no need for locks
    */
+
+  // changing actor behavior + stashing
+  // actors can spawn other actors
+  // guardians: /system, /user, / = root guardian
+
+  // actors have a defined lifecycle: they can be started, stopped, suspended, resumed, restarted
+
+  // stopping actors - context.stop
+  // actor ! PoisonPill
+
+  // logging
+  // supervision
+
+  // configure Akka infrastructure: dispatchers, routers, mailboxes
+
+  // schedulers
+  import scala.concurrent.duration._
+  import system.dispatcher
+  system.scheduler.scheduleOnce(2 seconds) {
+    actor ! "delayed happy birthday!"
+  }
+
+  // Akka patterns including FSM + ask pattern
+  import akka.pattern.ask
+  implicit val timeout = Timeout(3 seconds)
+
+  val future = actor ? "question"
+
+  // the pipe pattern
+  import akka.pattern.pipe
+  val anotherActor = system.actorOf(Props[SimpleActor], "anotherSimpleActor")
+  future.mapTo[String].pipeTo(anotherActor)
 }

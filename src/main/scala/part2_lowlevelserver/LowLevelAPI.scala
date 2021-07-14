@@ -3,6 +3,7 @@ package part2_lowlevelserver
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.Http.IncomingConnection
+import akka.http.scaladsl.model.headers.Location
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpRequest, HttpResponse, StatusCodes, Uri}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink}
@@ -217,5 +218,55 @@ object LowLevelAPI extends App {
       )
   }
 
-  Http().bindAndHandle(myVersionExerciseRequestHandler, "localhost", 8388)
+  Http().bindAndHandle(myVersionExerciseRequestHandler, "localhost", 8389)
+
+  val syncExerciseHandler: HttpRequest => HttpResponse = {
+    case HttpRequest(HttpMethods.GET, Uri.Path("/"), _, _, _) =>
+      HttpResponse(
+        // status code OK (200) is default
+        entity = HttpEntity(
+          ContentTypes.`text/html(UTF-8)`,
+          "Hello from the exercise front door!"
+        )
+      )
+    case HttpRequest(HttpMethods.GET, Uri.Path("/about"), _, _, _) =>
+      HttpResponse(
+        // status code OK (200) is default
+        entity = HttpEntity(
+          ContentTypes.`text/html(UTF-8)`,
+          """
+            |<html>
+            | <body>
+            |   <div style="color:red">
+            |     Hello from the about page!
+            |   </div>
+            | </body>
+            |</html>
+            |""".stripMargin
+        )
+      )
+
+    // path /search redirects to some other part of our website
+    case HttpRequest(HttpMethods.GET, Uri.Path("/search"), _, _, _) =>
+      HttpResponse(
+        StatusCodes.Found,
+        headers = List(Location("http://google.com/"))
+      )
+
+    case request: HttpRequest =>
+      request.discardEntityBytes()
+      HttpResponse(
+        StatusCodes.NotFound, // HTTP 404
+        entity = HttpEntity(
+          ContentTypes.`text/html(UTF-8)`,
+          "OOPS, you're in no man's land, sorry."
+        )
+      )
+  }
+
+  val bindingFuture = Http().bindAndHandleSync(syncExerciseHandler, "localhost", 8388)
+
+  // shutdown the server
+  bindingFuture.flatMap(binding => binding.unbind())
+    .onComplete(_ => system.terminate())
 }

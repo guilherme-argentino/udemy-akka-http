@@ -162,4 +162,60 @@ object LowLevelAPI extends App {
 
   // shorthand version
   Http().bindAndHandle(streamsBasedRequestHandler, "localhost", 8082)
+
+  /**
+   * Exercise: create your own HTTP server running on localhost on 8388, which replies
+   *  - with a welcome message on the "front door" localhost:8388
+   *  - with a proper HTML on localhost:8388/about
+   *  - with a 404 message otherwise
+   */
+  val myVersionExerciseRequestHandler: Flow[HttpRequest, HttpResponse, _] = Flow[HttpRequest].map {
+    case HttpRequest(HttpMethods.GET, Uri.Path("/"), _, _, _) =>
+      HttpResponse(
+        StatusCodes.OK,
+        entity = HttpEntity(
+          ContentTypes.`text/html(UTF-8)`,
+          """
+            |<html>
+            | <body>
+            |   <h1>Front Door</h1>
+            |   <p>Hello from Akka Http Course!</p>
+            | </body>
+            |</html>
+            |""".stripMargin
+        )
+      )
+    case HttpRequest(HttpMethods.GET, Uri.Path("/about"), _, _, _) =>
+      HttpResponse(
+        StatusCodes.OK,
+        entity = HttpEntity(
+          ContentTypes.`text/html(UTF-8)`,
+          """
+            |<html>
+            | <body>
+            |   <h1>About</h1>
+            |   <p>My own page!</p>
+            | </body>
+            |</html>
+            |""".stripMargin
+        )
+      )
+    case request: HttpRequest =>
+      request.discardEntityBytes()
+      HttpResponse(
+        StatusCodes.NotFound, // HTTP 404
+        entity = HttpEntity(
+          ContentTypes.`text/html(UTF-8)`,
+          """
+            |<html>
+            | <body>
+            |   OOPS! The resource can't be found.
+            | </body>
+            |</html>
+            |""".stripMargin
+        )
+      )
+  }
+
+  Http().bindAndHandle(myVersionExerciseRequestHandler, "localhost", 8388)
 }

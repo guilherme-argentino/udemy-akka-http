@@ -7,13 +7,13 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpMethods, HttpRequ
 import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import part2_lowlevelserver.GuitarDB.{CreateGuitar, FindAllGuitars, FindGuitar, GuitarCreated}
+import part2_lowlevelserver.GuitarDB.{AddQuantity, CreateGuitar, FindAllGuitars, FindGuitar, GuitarCreated}
 import spray.json._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-case class Guitar(make: String, model: String)
+case class Guitar(make: String, model: String, quantity: Int = 0)
 
 object GuitarDB {
   case class CreateGuitar(guitar: Guitar)
@@ -23,6 +23,10 @@ object GuitarDB {
   case class FindGuitar(id: Int)
 
   case object FindAllGuitars
+
+  case class AddQuantity(id: Int, quantity: Int)
+
+  case class FindGuitarsInStock(inStock: Boolean)
 }
 
 class GuitarDB extends Actor with ActorLogging {
@@ -44,12 +48,28 @@ class GuitarDB extends Actor with ActorLogging {
       guitars = guitars + (currentGuitarId -> guitar)
       sender() ! GuitarCreated(currentGuitarId)
       currentGuitarId += 1
+    case AddQuantity(id, quantity) =>
+      log.info(s"Triying to add $quantity items for guitar $id")
+      val guitar: Option[Guitar] = guitars.get(id)
+      val newGuitar = guitar.map {
+        case Guitar(make, model, q) => Guitar(make, model, q + quantity)
+      }
+
+      newGuitar.foreach(guitar => guitars = guitars + (id -> guitar))
+      sender() ! newGuitar
+
+    case FindGuitarsInStock(inStock) =>
+      log.info(s"Searching for all guitars ${if(inStock) "in" else "out of"} stock")
+      if (inStock)
+        sender() ! guitars.values.filter(_.quantity > 0)
+      else
+        sender() ! guitars.values.filter(_.quantity == 0)
   }
 }
 
 trait GuitarStoreJsonProtocol extends DefaultJsonProtocol {
 
-  implicit val guitarFormat = jsonFormat2(Guitar)
+  implicit val guitarFormat = jsonFormat3(Guitar)
 
 }
 
@@ -57,6 +77,8 @@ object LowLevelRest extends App with GuitarStoreJsonProtocol {
 
   implicit val system = ActorSystem("LowLevelRest")
   implicit val materializer = ActorMaterializer()
+
+  import GuitarDB._
 
   import system.dispatcher // not for production
 
@@ -75,7 +97,8 @@ object LowLevelRest extends App with GuitarStoreJsonProtocol {
     """
       |{
       |  "make": "Fender",
-      |  "model": "Stratocaster"
+      |  "model": "Stratocaster",
+      |  "quantity": 3
       |}
       |""".stripMargin
   println(simpleGuitarJsonString.parseJson.convertTo[Guitar])
@@ -120,6 +143,41 @@ object LowLevelRest extends App with GuitarStoreJsonProtocol {
   }
 
   val requestHandler: HttpRequest => Future[HttpResponse] = {
+    case HttpRequest(HttpMethods.POST, uri@Uri.Path("/api/guitar/inventory"), _, _, _) =>
+      val query = uri.query()
+      val guitarId: Option[Int] = query.get("id").map(_.toInt)
+      val guitarQuantity: Option[Int] = query.get("quantity").map(_.toInt)
+
+      val validGuitarResponseFuture = for {
+        id <- guitarId
+        quantity <- guitarQuantity
+      } yield {
+        val newGuitarFuture = (guitarDb ? AddQuantity(id, quantity)).mapTo[Option[Guitar]]
+        newGuitarFuture.map(_ => HttpResponse(StatusCodes.OK))
+      }
+
+      validGuitarResponseFuture.getOrElse(Future(HttpResponse(StatusCodes.NotFound)))
+
+    case HttpRequest(HttpMethods.GET, uri@Uri.Path("/api/guitar/inventory"), _, _, _) =>
+      val query = uri.query()
+      val inStockOption = query.get("inStock").map(_.toBoolean)
+
+      inStockOption match {
+        case Some(inStock) =>
+          val guitarsFuture: Future[List[Guitar]] = (guitarDb ? FindGuitarsInStock(inStock)).mapTo[List[Guitar]]
+          guitarsFuture.map { guitars =>
+            HttpResponse(
+              entity = HttpEntity(
+                ContentTypes.`application/json`,
+                guitars.toJson.prettyPrint
+              )
+            )
+          }
+        case None => Future {
+          HttpResponse(status = StatusCodes.BadRequest)
+        }
+      }
+
     case HttpRequest(HttpMethods.GET, uri@Uri.Path("/api/guitar"), _, _, _) =>
       /*
         query parameter handling code

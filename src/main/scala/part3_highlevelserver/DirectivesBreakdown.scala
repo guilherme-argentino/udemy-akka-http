@@ -61,11 +61,11 @@ object DirectivesBreakdown extends App {
 
   // GET on /api/item/42
   val pathExtractionRoute =
-    path("api" / "item" / IntNumber) { (itemNumber: Int) =>
-      // other directives
-      println(s"I've got a number in my path: $itemNumber")
-      complete(StatusCodes.OK)
-    }
+  path("api" / "item" / IntNumber) { (itemNumber: Int) =>
+    // other directives
+    println(s"I've got a number in my path: $itemNumber")
+    complete(StatusCodes.OK)
+  }
 
   val pathMultiExtractRoute =
     path("api" / "order" / IntNumber / IntNumber) { (id, inventory) =>
@@ -76,7 +76,7 @@ object DirectivesBreakdown extends App {
   // Http().bindAndHandle(pathMultiExtractRoute, "localhost", 8080)
 
   val queryParamExtractionRoute =
-    // /api/item?id=45
+  // /api/item?id=45
     path("api" / "item") {
       parameter('id.as[Int]) { (itemId: Int) =>
         println(s"I've extracted the ID as $itemId")
@@ -95,4 +95,92 @@ object DirectivesBreakdown extends App {
     }
 
   Http().bindAndHandle(extractRequestRoute, "localhost", 8080)
+
+  /**
+   * Type #3: composite directives
+   */
+  val simpleNestedRoute =
+    path("api" / "item") {
+      get {
+        complete(StatusCodes.OK)
+      }
+    }
+
+  val compactSimpleNestedRoute = (path("api" / "item") & get) {
+    complete(StatusCodes.OK)
+  }
+
+  val compactExtractRequestRoute =
+    (path("controlEndPoint") & extractRequest & extractLog) { (request, log) =>
+      log.info(s"I got the http request: $request")
+      complete(StatusCodes.OK)
+    }
+
+  // /about and /aboutUs
+  val repeatedRoute =
+    path("about") {
+      complete(StatusCodes.OK)
+    } ~
+      path("aboutUs") {
+        complete(StatusCodes.OK)
+      }
+
+  val dryRoute =
+    (path("about") | path("aboutUs")) {
+      complete(StatusCodes.OK)
+    }
+
+  // yourblog.com/42 AND yourblog.com?id=42
+
+  val blogById =
+    path(IntNumber) { (blogpostId: Int) =>
+      // complex server logic
+      complete(StatusCodes.OK)
+    }
+
+  val blogByQueryParamRoute =
+    parameter('postId.as[Int]) { (blogpostId: Int) =>
+      // the SAME server logic
+      complete(StatusCodes.OK)
+    }
+
+  val combinedBlogByIdRoute =
+    (path(IntNumber) | parameter('postId.as[Int])) { (blogpostId: Int) =>
+      // your original server logic
+      complete(StatusCodes.OK)
+    }
+
+  /**
+   * Type #4: "actionable" directives
+   */
+
+  val completeOkRoute = complete(StatusCodes.OK)
+
+  val failedRoute =
+    path("notSupported") {
+      failWith(new RuntimeException("Unsupported!")) // completes with HTTP 500
+    }
+
+  val routeWithRejection =
+//    path("home") {
+//      reject
+//    } ~
+      path("index") {
+        completeOkRoute
+      }
+
+  /**
+   * Exercise: can you spot the mistaje ?!
+   */
+  val getOrPutPath =
+    path("api" / "myEndpoint") {
+      get {
+        completeOkRoute
+      } ~
+      post {
+        complete(StatusCodes.Forbidden)
+      }
+    }
+
+  Http().bindAndHandle(getOrPutPath, "localhost", 8081)
 }

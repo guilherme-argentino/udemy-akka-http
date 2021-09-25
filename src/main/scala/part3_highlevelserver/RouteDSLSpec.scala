@@ -53,6 +53,15 @@ class RouteDSLSpec extends WordSpec with Matchers with ScalatestRouteTest with B
         book shouldBe Some(Book(2, "JRR Tolkien", "The Lord of the Rings"))
       }
     }
+
+    "insert a book into the 'database'" in {
+      val newBook = Book(5, "Steven Pressfield", "The War of Art")
+      Post("/api/book", newBook) ~> libraryRoute ~> check {
+        status shouldBe StatusCodes.OK
+        assert(books.contains(newBook))
+        books should contain(newBook) // same
+      }
+    }
   }
 
 }

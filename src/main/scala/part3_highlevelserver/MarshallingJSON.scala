@@ -16,10 +16,15 @@ case class Player(nickname: String, characterClass: String, level: Int)
 
 object GameAreaMap {
   case object GetAllPlayers
+
   case class GetPlayer(nickname: String)
+
   case class GetPlayersByClass(characterClass: String)
+
   case class AddPlayer(player: Player)
+
   case class RemovePlayer(player: Player)
+
   case object OperationSuccess
 }
 
@@ -62,6 +67,7 @@ object MarshallingJSON extends App with PlayerJsonProtocol with SprayJsonSupport
 
   implicit val system = ActorSystem("MarshallingJSON")
   implicit val materializer = ActorMaterializer()
+
   import system.dispatcher
   import GameAreaMap._
 
@@ -89,7 +95,7 @@ object MarshallingJSON extends App with PlayerJsonProtocol with SprayJsonSupport
   val rtjvmGameRouteSkel =
     pathPrefix("api" / "player") {
       get {
-        path("class" / Segment) {  charcterClass =>
+        path("class" / Segment) { charcterClass =>
           val playersByClassFuture = (rtjvmGameMap ? GetPlayersByClass(charcterClass)).mapTo[List[Player]]
           complete(playersByClassFuture)
         } ~ (path(Segment) | parameter('nickname)) { nickname =>
@@ -98,12 +104,12 @@ object MarshallingJSON extends App with PlayerJsonProtocol with SprayJsonSupport
         } ~ pathEndOrSingleSlash {
           complete((rtjvmGameMap ? GetAllPlayers).mapTo[List[Player]])
         }
-      } ~ post {
-        entity(as[Player]) { player =>
+      } ~ entity(as[Player]) { player =>
+        post {
           complete((rtjvmGameMap ? AddPlayer(player)).map(_ => StatusCodes.OK))
+        } ~ delete {
+          complete((rtjvmGameMap ? RemovePlayer(player)).map(_ => StatusCodes.OK))
         }
-      } ~ delete {
-        reject
       }
     }
 

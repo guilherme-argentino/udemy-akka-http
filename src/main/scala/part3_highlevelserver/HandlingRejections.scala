@@ -5,7 +5,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.{Rejection, RejectionHandler}
+import akka.http.scaladsl.server.{MethodRejection, MissingQueryParamRejection, Rejection, RejectionHandler}
 
 object HandlingRejections extends App {
   implicit val system: ActorSystem = ActorSystem("MarshallingJSON")
@@ -50,5 +50,23 @@ object HandlingRejections extends App {
       }
     }
 
-  Http().bindAndHandle(simpleRouteWithHandlers, "localhost", 8080)
+  //  Http().bindAndHandle(simpleRouteWithHandlers, "localhost", 8080)
+
+  // list(method rejection, query param rejection)
+  implicit val customRejectionHandler: RejectionHandler = RejectionHandler.newBuilder()
+    .handle {
+      case m: MissingQueryParamRejection =>
+        println(s"I got a query param rejection: $m")
+        complete("Rejected query param!")
+    }
+    .handle {
+      case m: MethodRejection =>
+        println(s"I got a method rejection: $m")
+        complete("Rejected method!")
+    }
+    .result()
+
+  // sealing a route
+
+  Http().bindAndHandle(simpleRoute, "localhost", 8080)
 }

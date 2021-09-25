@@ -75,8 +75,14 @@ class RouteDSLSpec extends WordSpec with Matchers with ScalatestRouteTest with B
         methodRejections.length shouldBe 2
       }
     }
-  }
 
+    "return all the books of a given author" in {
+      Get("/api/book/author/JRR%20Tolkien") ~> libraryRoute ~> check {
+        status shouldBe StatusCodes.OK
+        entityAs[List[Book]] shouldBe books.filter(_.author == "JRR Tolkien")
+      }
+    }
+  }
 }
 
 object RouteDSLSpec extends BookJsonProtocol with SprayJsonSupport {
@@ -98,14 +104,17 @@ object RouteDSLSpec extends BookJsonProtocol with SprayJsonSupport {
    */
   val libraryRoute: Route =
     pathPrefix("api" / "book") {
-      get {
-        (path(IntNumber) | parameter('id.as[Int])) { id =>
-          complete(books.find(_.id == id))
-        } ~
-          pathEndOrSingleSlash {
-            complete(books)
-          }
+      (path("author" / Segment) & get) { author =>
+        complete(books.filter(_.author == author))
       } ~
+        get {
+          (path(IntNumber) | parameter('id.as[Int])) { id =>
+            complete(books.find(_.id == id))
+          } ~
+            pathEndOrSingleSlash {
+              complete(books)
+            }
+        } ~
         post {
           entity(as[Book]) { book =>
             books = books :+ book
@@ -114,4 +123,5 @@ object RouteDSLSpec extends BookJsonProtocol with SprayJsonSupport {
             complete(StatusCodes.BadRequest)
         }
     }
+
 }

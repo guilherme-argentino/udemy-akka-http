@@ -3,7 +3,7 @@ package part3_highlevelserver
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{ContentTypes, StatusCodes}
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{MethodRejection, Route}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import org.scalatest.{Matchers, WordSpec}
 import spray.json._
@@ -60,6 +60,19 @@ class RouteDSLSpec extends WordSpec with Matchers with ScalatestRouteTest with B
         status shouldBe StatusCodes.OK
         assert(books.contains(newBook))
         books should contain(newBook) // same
+      }
+    }
+
+    "not accept other methods than POST and GET" in {
+      Delete("/api/book") ~> libraryRoute ~> check {
+        rejections should not be empty   // "natural language" style
+        rejections.should(not).be(empty) // same
+
+        val methodRejections = rejections.collect {
+          case rejection: MethodRejection => rejection
+        }
+
+        methodRejections.length shouldBe 2
       }
     }
   }

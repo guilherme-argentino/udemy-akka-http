@@ -28,6 +28,13 @@ class RouteDSLSpec extends WordSpec with Matchers with ScalatestRouteTest with B
         entityAs[List[Book]] shouldBe books
       }
     }
+
+    "return a book by hitting the query parameter endpoint" in {
+      Get("/api/book?id=2") ~> libraryRoute ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[Option[Book]] shouldBe Some(Book(2, "JRR Tolkien", "The Lord of the Rings"))
+      }
+    }
   }
 
 }

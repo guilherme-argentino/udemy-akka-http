@@ -1,9 +1,16 @@
 package part3_highlevelserver
 
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.server.Directives._
+import akka.pattern.ask
 import akka.stream.ActorMaterializer
-import part3_highlevelserver.GameAreaMap.AddPlayer
+import akka.util.Timeout
+import spray.json._
+
+import scala.concurrent.duration._
 
 case class Player(nickname: String, characterClass: String, level: Int)
 
@@ -47,7 +54,11 @@ class GameAreaMap extends Actor with ActorLogging {
   }
 }
 
-object MarshallingJSON extends App {
+trait PlayerJsonProtocol extends DefaultJsonProtocol {
+  implicit val playerFormat = jsonFormat3(Player)
+}
+
+object MarshallingJSON extends App with PlayerJsonProtocol with SprayJsonSupport {
 
   implicit val system = ActorSystem("MarshallingJSON")
   implicit val materializer = ActorMaterializer()
@@ -74,20 +85,27 @@ object MarshallingJSON extends App {
     - (Exercise) DELETE /api/player with JSON payload, removes the player from the map
    */
 
+  implicit val timeout = Timeout(2 seconds)
   val rtjvmGameRouteSkel =
     pathPrefix("api" / "player") {
       get {
         path("class" / Segment) {  charcterClass =>
-          reject
+          val playersByClassFuture = (rtjvmGameMap ? GetPlayersByClass(charcterClass)).mapTo[List[Player]]
+          complete(playersByClassFuture)
         } ~ (path(Segment) | parameter('nickname)) { nickname =>
-          reject
+          val playerOptionFuture = (rtjvmGameMap ? GetPlayer(nickname)).mapTo[Option[Player]]
+          complete(playerOptionFuture)
         } ~ pathEndOrSingleSlash {
-          reject
+          complete((rtjvmGameMap ? GetAllPlayers).mapTo[List[Player]])
         }
       } ~ post {
-        reject
-      }~ delete {
+        entity(as[Player]) { player =>
+          complete((rtjvmGameMap ? AddPlayer(player)).map(_ => StatusCodes.OK))
+        }
+      } ~ delete {
         reject
       }
     }
+
+  Http().bindAndHandle(rtjvmGameRouteSkel, "localhost", 8080)
 }

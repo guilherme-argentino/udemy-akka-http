@@ -9,10 +9,13 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.util.CompactByteString
 
+import scala.concurrent.duration._
+
 object WebsocketsDemo extends App {
 
   implicit val system: ActorSystem = ActorSystem("WebsocketsDemo")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
+
   import system.dispatcher
 
   // Message: TextMessage vs BinaryMessage
@@ -69,8 +72,28 @@ object WebsocketsDemo extends App {
       )
     } ~
       path("greeter") {
-        handleWebSocketMessages(websocketFlow)
+        handleWebSocketMessages(socialFlow)
       }
 
   Http().bindAndHandle(websocketRoute, "localhost", 8080)
+
+
+  case class SocialPost(owner: String, content: String)
+
+  val socialFeed = Source(
+    List(
+      SocialPost("Martin", "Scala 3 has been announced!"),
+      SocialPost("Daniel", "A new Rock the JVM course is open!"),
+      SocialPost("Martin", "I killed Java.")
+    )
+  )
+
+  val socialMessages = socialFeed
+    .throttle(1, 2 seconds)
+    .map(socialPost => TextMessage(s"${socialPost.owner} said: ${socialPost.content}"))
+
+  val socialFlow: Flow[Message, Message, Any] = Flow.fromSinkAndSource(
+    Sink.foreach[Message](println),
+    socialMessages
+  )
 }
